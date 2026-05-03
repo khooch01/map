@@ -604,8 +604,8 @@
             </div>
             <div class="add-location-form">
                 <h3 style="margin-bottom: 10px;">Add Location</h3>
-                <input type="text" id="locationLink" placeholder="Google Maps Share Link">
-                <input type="text" id="locationName" placeholder="Location Name (optional - auto-extracted)">
+                <input type="text" id="locationLink" placeholder="Google Maps Share Link OR Location Name (e.g., Roma, Borghese Art Gallery)">
+                <input type="text" id="locationName" placeholder="Custom Name (optional - will use extracted/searched name)">
                 <textarea id="locationDescription" placeholder="Description (optional)" rows="3" style="resize: vertical;"></textarea>
                 <input type="file" id="locationPhoto" accept="image/*,video/*" multiple style="margin-bottom: 10px;">
                 <small style="display: block; margin-bottom: 10px; color: #666;">Upload multiple photos or videos</small>
@@ -1388,6 +1388,27 @@
             return null;
         }
 
+        // Geocode location name using Nominatim (OpenStreetMap)
+        async function geocodeLocationName(locationName) {
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationName)}&format=json&limit=1`);
+                const data = await response.json();
+                
+                if (data && data.length > 0) {
+                    return {
+                        lat: parseFloat(data[0].lat),
+                        lng: parseFloat(data[0].lon),
+                        name: data[0].display_name.split(',')[0] // Use first part of display name
+                    };
+                }
+                
+                return null;
+            } catch (error) {
+                console.error('Geocoding error:', error);
+                return null;
+            }
+        }
+
         async function addLocation() {
             const link = document.getElementById('locationLink').value;
             const manualName = document.getElementById('locationName').value;
@@ -1396,17 +1417,30 @@
             const photoInput = document.getElementById('locationPhoto');
 
             if (!link) {
-                alert('Please paste a Google Maps link');
+                alert('Please enter a Google Maps link or location name');
                 return;
             }
 
-            const result = await parseGoogleMapsLink(link);
-            if (!result) {
-                alert('Invalid Google Maps link. Please use a share or embed link from Google Maps.');
-                return;
+            let result = null;
+            
+            // Check if it's a Google Maps link or just a location name
+            if (link.includes('google.com/maps') || link.includes('goo.gl') || link.includes('maps.app.goo.gl') || link.includes('share.google') || link.includes('<iframe')) {
+                // It's a Google Maps link
+                result = await parseGoogleMapsLink(link);
+                if (!result) {
+                    alert('Invalid Google Maps link. Please use a share or embed link from Google Maps.');
+                    return;
+                }
+            } else {
+                // It's a location name - use geocoding
+                result = await geocodeLocationName(link);
+                if (!result) {
+                    alert('Could not find location. Please try a more specific name or use a Google Maps link.');
+                    return;
+                }
             }
 
-            // Use manual name if provided, otherwise use extracted name
+            // Use manual name if provided, otherwise use extracted/geocoded name
             const finalName = manualName.trim() || result.name;
 
             // Generate unique ID for this location
@@ -1623,8 +1657,8 @@
                             <button onclick="exportJSON()">⬇️ Export</button>
                         </div>
                         <div class="add-location-form">
-                            <input type="text" id="locationLinkMobile" placeholder="Google Maps Share Link">
-                            <input type="text" id="locationNameMobile" placeholder="Location Name (optional)">
+                            <input type="text" id="locationLinkMobile" placeholder="Google Maps Link OR Location Name (e.g., Roma)">
+                            <input type="text" id="locationNameMobile" placeholder="Custom Name (optional)">
                             <textarea id="locationDescriptionMobile" placeholder="Description (optional)" rows="3" style="resize: vertical;"></textarea>
                             <input type="file" id="locationPhotoMobile" accept="image/*,video/*" multiple style="margin-bottom: 10px;">
                             <small style="display: block; margin-bottom: 10px; color: #666;">Upload multiple photos or videos</small>
@@ -1794,14 +1828,27 @@
             const photoInput = document.getElementById('locationPhotoMobile');
 
             if (!link) {
-                alert('Please paste a Google Maps link');
+                alert('Please enter a Google Maps link or location name');
                 return;
             }
 
-            const result = await parseGoogleMapsLink(link);
-            if (!result) {
-                alert('Invalid Google Maps link');
-                return;
+            let result = null;
+            
+            // Check if it's a Google Maps link or just a location name
+            if (link.includes('google.com/maps') || link.includes('goo.gl') || link.includes('maps.app.goo.gl') || link.includes('share.google') || link.includes('<iframe')) {
+                // It's a Google Maps link
+                result = await parseGoogleMapsLink(link);
+                if (!result) {
+                    alert('Invalid Google Maps link');
+                    return;
+                }
+            } else {
+                // It's a location name - use geocoding
+                result = await geocodeLocationName(link);
+                if (!result) {
+                    alert('Could not find location. Please try a more specific name or use a Google Maps link.');
+                    return;
+                }
             }
 
             const finalName = manualName.trim() || result.name;

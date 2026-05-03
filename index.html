@@ -259,24 +259,238 @@
             background: #357ae8;
         }
 
-        /* Mobile Responsive Styles */
+        /* Mobile-specific UI (completely different design) */
         @media (max-width: 768px) {
             .header h1 {
-                font-size: 18px;
+                font-size: 16px;
+                margin-bottom: 5px;
             }
 
             .controls {
-                gap: 5px;
-            }
-
-            .category-btn {
-                padding: 6px 12px;
-                font-size: 12px;
+                display: none; /* Hide in header, move to bottom nav */
             }
 
             .main-container {
                 flex-direction: column;
+                position: fixed;
+                top: 60px;
+                left: 0;
+                right: 0;
+                bottom: 0;
             }
+
+            .sidebar {
+                display: none; /* Hidden by default, shown as slide-up panel */
+            }
+
+            #map {
+                width: 100%;
+                height: 100%;
+            }
+
+            /* Bottom Navigation Bar */
+            .mobile-bottom-nav {
+                display: flex;
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: white;
+                box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+                z-index: 1002;
+                padding: 8px 0;
+            }
+
+            .mobile-nav-btn {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 8px;
+                border: none;
+                background: none;
+                cursor: pointer;
+                font-size: 20px;
+                color: #666;
+                gap: 4px;
+            }
+
+            .mobile-nav-btn span {
+                font-size: 10px;
+            }
+
+            .mobile-nav-btn.active {
+                color: #4285f4;
+            }
+
+            /* Slide-up Panel */
+            .mobile-panel {
+                display: block;
+                position: fixed;
+                bottom: -100%;
+                left: 0;
+                right: 0;
+                height: 80vh;
+                background: white;
+                border-radius: 20px 20px 0 0;
+                box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
+                transition: bottom 0.3s ease;
+                z-index: 1003;
+                overflow: hidden;
+            }
+
+            .mobile-panel.active {
+                bottom: 0;
+            }
+
+            .mobile-panel-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 15px 20px;
+                border-bottom: 1px solid #eee;
+                position: sticky;
+                top: 0;
+                background: white;
+                z-index: 1;
+            }
+
+            .mobile-panel-header h2 {
+                font-size: 18px;
+                margin: 0;
+            }
+
+            .mobile-panel-close {
+                background: none;
+                border: none;
+                font-size: 24px;
+                cursor: pointer;
+                color: #666;
+                padding: 0;
+                width: 32px;
+                height: 32px;
+            }
+
+            .mobile-panel-content {
+                padding: 15px;
+                height: calc(100% - 60px);
+                overflow-y: auto;
+            }
+
+            /* Mobile Location List */
+            .location-item {
+                margin-bottom: 15px;
+                padding: 12px;
+            }
+
+            .location-preview-img {
+                height: 150px;
+            }
+
+            .location-item h3 {
+                font-size: 15px;
+            }
+
+            .location-item p {
+                font-size: 13px;
+            }
+
+            /* Mobile Add Form */
+            .add-location-form {
+                padding: 0;
+                background: transparent;
+                margin-bottom: 15px;
+            }
+
+            .add-location-form h3 {
+                font-size: 16px;
+                margin-bottom: 15px;
+            }
+
+            .add-location-form input,
+            .add-location-form select,
+            .add-location-form textarea {
+                font-size: 16px; /* Prevents zoom on iOS */
+                padding: 12px;
+            }
+
+            .add-location-form button {
+                padding: 14px;
+                font-size: 16px;
+            }
+
+            .save-load-btns {
+                margin-bottom: 15px;
+            }
+
+            .save-load-btns button {
+                padding: 10px;
+                font-size: 13px;
+            }
+
+            /* Mobile FAB (Floating Action Button) */
+            .mobile-fab {
+                display: block;
+                position: fixed;
+                bottom: 80px;
+                right: 20px;
+                width: 56px;
+                height: 56px;
+                border-radius: 50%;
+                background: #4285f4;
+                color: white;
+                border: none;
+                font-size: 24px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                cursor: pointer;
+                z-index: 1001;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .mobile-fab:active {
+                transform: scale(0.95);
+            }
+
+            /* Adjust buttons for mobile */
+            .edit-btn,
+            .delete-btn {
+                width: 36px;
+                height: 36px;
+                font-size: 18px;
+            }
+
+            .edit-btn {
+                right: 52px;
+            }
+        }
+
+        /* Desktop: Hide mobile-only elements */
+        @media (min-width: 769px) {
+            .mobile-bottom-nav,
+            .mobile-panel,
+            .mobile-fab {
+                display: none !important;
+            }
+        }
+
+        /* Small phones */
+        @media (max-width: 480px) {
+            .mobile-panel {
+                height: 85vh;
+            }
+
+            .mobile-nav-btn {
+                font-size: 18px;
+            }
+
+            .mobile-nav-btn span {
+                font-size: 9px;
+            }
+        }
+    </style>
 
             .sidebar {
                 width: 100%;
@@ -444,6 +658,36 @@
         </div>
         <div id="map"></div>
     </div>
+
+    <!-- Mobile Bottom Navigation -->
+    <div class="mobile-bottom-nav">
+        <button class="mobile-nav-btn active" onclick="showMobilePanel('map')">
+            🗺️<span>Map</span>
+        </button>
+        <button class="mobile-nav-btn" onclick="showMobilePanel('list')">
+            📍<span>List</span>
+        </button>
+        <button class="mobile-nav-btn" onclick="showMobilePanel('filter')">
+            🔍<span>Filter</span>
+        </button>
+        <button class="mobile-nav-btn" onclick="showMobilePanel('add')">
+            ➕<span>Add</span>
+        </button>
+    </div>
+
+    <!-- Mobile Slide-up Panel -->
+    <div class="mobile-panel" id="mobilePanel">
+        <div class="mobile-panel-header">
+            <h2 id="mobilePanelTitle">Locations</h2>
+            <button class="mobile-panel-close" onclick="closeMobilePanel()">×</button>
+        </div>
+        <div class="mobile-panel-content" id="mobilePanelContent">
+            <!-- Content will be dynamically loaded -->
+        </div>
+    </div>
+
+    <!-- Mobile FAB for quick add -->
+    <button class="mobile-fab" onclick="showMobilePanel('add')">+</button>
 
     <script>
         let map;
@@ -899,6 +1143,123 @@
 
         // Initialize map when page loads
         document.addEventListener('DOMContentLoaded', initMap);
+
+        // Mobile Panel Functions
+        function showMobilePanel(type) {
+            const panel = document.getElementById('mobilePanel');
+            const title = document.getElementById('mobilePanelTitle');
+            const content = document.getElementById('mobilePanelContent');
+            
+            // Update active nav button
+            document.querySelectorAll('.mobile-nav-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.closest('.mobile-nav-btn').classList.add('active');
+            
+            switch(type) {
+                case 'map':
+                    closeMobilePanel();
+                    break;
+                case 'list':
+                    title.textContent = 'Locations';
+                    content.innerHTML = document.getElementById('locationList').innerHTML;
+                    panel.classList.add('active');
+                    break;
+                case 'filter':
+                    title.textContent = 'Filter by Category';
+                    content.innerHTML = `
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <button class="category-btn ${currentFilter === 'all' ? 'active' : ''}" onclick="filterCategoryMobile('all')" style="width: 100%; padding: 15px; font-size: 16px;">All Locations</button>
+                            <button class="category-btn breakfast ${currentFilter === 'breakfast' ? 'active' : ''}" onclick="filterCategoryMobile('breakfast')" style="width: 100%; padding: 15px; font-size: 16px;">🍳 Breakfast</button>
+                            <button class="category-btn lunch ${currentFilter === 'lunch' ? 'active' : ''}" onclick="filterCategoryMobile('lunch')" style="width: 100%; padding: 15px; font-size: 16px;">🍔 Lunch</button>
+                            <button class="category-btn dinner ${currentFilter === 'dinner' ? 'active' : ''}" onclick="filterCategoryMobile('dinner')" style="width: 100%; padding: 15px; font-size: 16px;">🍽️ Dinner</button>
+                            <button class="category-btn hotel ${currentFilter === 'hotel' ? 'active' : ''}" onclick="filterCategoryMobile('hotel')" style="width: 100%; padding: 15px; font-size: 16px;">🏨 Hotel</button>
+                            <button class="category-btn travel ${currentFilter === 'travel' ? 'active' : ''}" onclick="filterCategoryMobile('travel')" style="width: 100%; padding: 15px; font-size: 16px;">✈️ Travel</button>
+                        </div>
+                    `;
+                    panel.classList.add('active');
+                    break;
+                case 'add':
+                    title.textContent = 'Add Location';
+                    content.innerHTML = `
+                        <div class="save-load-btns">
+                            <button onclick="saveToJSON()">💾 Save</button>
+                            <button onclick="loadFromJSON()">📂 Load</button>
+                            <button onclick="exportJSON()">⬇️ Export</button>
+                        </div>
+                        <div class="add-location-form">
+                            <input type="text" id="locationLinkMobile" placeholder="Google Maps Share Link">
+                            <input type="text" id="locationNameMobile" placeholder="Location Name (optional)">
+                            <textarea id="locationDescriptionMobile" placeholder="Description (optional)" rows="3" style="resize: vertical;"></textarea>
+                            <input type="file" id="locationPhotoMobile" accept="image/*" style="margin-bottom: 10px;">
+                            <select id="locationCategoryMobile">
+                                <option value="breakfast">Breakfast</option>
+                                <option value="lunch">Lunch</option>
+                                <option value="dinner">Dinner</option>
+                                <option value="hotel">Hotel</option>
+                                <option value="travel">Travel</option>
+                            </select>
+                            <button onclick="addLocationMobile()">Add Location</button>
+                        </div>
+                    `;
+                    panel.classList.add('active');
+                    break;
+            }
+        }
+
+        function closeMobilePanel() {
+            document.getElementById('mobilePanel').classList.remove('active');
+            document.querySelectorAll('.mobile-nav-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelector('.mobile-nav-btn').classList.add('active');
+        }
+
+        function filterCategoryMobile(category) {
+            filterCategory(category);
+            closeMobilePanel();
+        }
+
+        async function addLocationMobile() {
+            const link = document.getElementById('locationLinkMobile').value;
+            const manualName = document.getElementById('locationNameMobile').value;
+            const description = document.getElementById('locationDescriptionMobile').value;
+            const category = document.getElementById('locationCategoryMobile').value;
+            const photoInput = document.getElementById('locationPhotoMobile');
+
+            if (!link) {
+                alert('Please paste a Google Maps link');
+                return;
+            }
+
+            const result = await parseGoogleMapsLink(link);
+            if (!result) {
+                alert('Invalid Google Maps link');
+                return;
+            }
+
+            const finalName = manualName.trim() || result.name;
+
+            let photoData = null;
+            if (photoInput.files && photoInput.files[0]) {
+                const reader = new FileReader();
+                photoData = await new Promise((resolve) => {
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.readAsDataURL(photoInput.files[0]);
+                });
+            }
+
+            locations.push({
+                name: finalName,
+                category: category,
+                lat: result.lat,
+                lng: result.lng,
+                address: `${result.lat.toFixed(4)}, ${result.lng.toFixed(4)}`,
+                description: description || '',
+                photo: photoData
+            });
+
+            saveToJSON();
+            renderLocations();
+            updateSidebar();
+            closeMobilePanel();
+        }
     </script>
 </body>
 </html>

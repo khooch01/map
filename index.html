@@ -153,6 +153,94 @@
             margin-bottom: 10px;
         }
 
+        .location-preview-video {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .media-gallery {
+            position: relative;
+            width: 100%;
+            height: 150px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            border-radius: 6px;
+        }
+
+        .media-gallery-item {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+        }
+
+        .media-gallery-item.active {
+            display: block;
+        }
+
+        .media-gallery-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border: none;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+            transition: background 0.3s;
+        }
+
+        .media-gallery-nav:hover {
+            background: rgba(0,0,0,0.9);
+        }
+
+        .media-gallery-nav.prev {
+            left: 10px;
+        }
+
+        .media-gallery-nav.next {
+            right: 10px;
+        }
+
+        .media-gallery-counter {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            z-index: 5;
+        }
+
+        .popup-media-gallery {
+            position: relative;
+            width: 100%;
+            margin-bottom: 8px;
+            min-height: 150px;
+        }
+
+        .popup-media-item {
+            width: 100%;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .popup-media-item.active {
+            display: block;
+        }
+
         .delete-btn {
             position: absolute;
             top: 10px;
@@ -171,6 +259,7 @@
             align-items: center;
             justify-content: center;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 15;
         }
 
         .delete-btn:hover {
@@ -194,6 +283,7 @@
             align-items: center;
             justify-content: center;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 15;
         }
 
         .edit-btn:hover {
@@ -517,7 +607,8 @@
                 <input type="text" id="locationLink" placeholder="Google Maps Share Link">
                 <input type="text" id="locationName" placeholder="Location Name (optional - auto-extracted)">
                 <textarea id="locationDescription" placeholder="Description (optional)" rows="3" style="resize: vertical;"></textarea>
-                <input type="file" id="locationPhoto" accept="image/*" style="margin-bottom: 10px;">
+                <input type="file" id="locationPhoto" accept="image/*,video/*" multiple style="margin-bottom: 10px;">
+                <small style="display: block; margin-bottom: 10px; color: #666;">Upload multiple photos or videos</small>
                 <select id="locationCategory">
                     <option value="breakfast">Breakfast</option>
                     <option value="lunch">Lunch</option>
@@ -525,7 +616,7 @@
                     <option value="hotel">Hotel</option>
                     <option value="travel">Travel</option>
                 </select>
-                <button onclick="addLocation()">Add Location</button>
+                <button id="addLocationBtn">Add Location</button>
             </div>
             <div id="locationList"></div>
         </div>
@@ -567,11 +658,95 @@
         let markers = [];
         let currentFilter = 'all';
         let markerLayer;
+        let db; // IndexedDB database
 
-        // Load locations from localStorage or start with empty array
+        // IndexedDB setup
+        const DB_NAME = 'LocationMediaDB';
+        const DB_VERSION = 1;
+        const MEDIA_STORE = 'mediaFiles';
+
+        // Initialize IndexedDB
+        function initIndexedDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(MEDIA_STORE)) {
+                        db.createObjectStore(MEDIA_STORE, { keyPath: 'id' });
+                    }
+                };
+            });
+        }
+
+        // Save media to IndexedDB
+        async function saveMediaToIndexedDB(locationId, mediaArray) {
+            if (!db) await initIndexedDB();
+            
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([MEDIA_STORE], 'readwrite');
+                const store = transaction.objectStore(MEDIA_STORE);
+                
+                const request = store.put({
+                    id: locationId,
+                    media: mediaArray
+                });
+                
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // Get media from IndexedDB
+        async function getMediaFromIndexedDB(locationId) {
+            if (!db) await initIndexedDB();
+            
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([MEDIA_STORE], 'readonly');
+                const store = transaction.objectStore(MEDIA_STORE);
+                const request = store.get(locationId);
+                
+                request.onsuccess = () => {
+                    resolve(request.result ? request.result.media : []);
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // Delete media from IndexedDB
+        async function deleteMediaFromIndexedDB(locationId) {
+            if (!db) await initIndexedDB();
+            
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([MEDIA_STORE], 'readwrite');
+                const store = transaction.objectStore(MEDIA_STORE);
+                const request = store.delete(locationId);
+                
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // Load locations from localStorage (without media data)
         let locations = JSON.parse(localStorage.getItem('mapLocations')) || [];
 
-        function initMap() {
+        async function initMap() {
+            // Initialize IndexedDB first
+            await initIndexedDB();
+            
+            // Load media for all locations from IndexedDB
+            for (let i = 0; i < locations.length; i++) {
+                if (locations[i].id) {
+                    locations[i].media = await getMediaFromIndexedDB(locations[i].id);
+                }
+            }
+            
             const defaultLat = locations.length > 0 ? locations[0].lat : 40.7580;
             const defaultLng = locations.length > 0 ? locations[0].lng : -73.9855;
             map = L.map('map').setView([defaultLat, defaultLng], 13);
@@ -646,13 +821,38 @@
                         distances.map(d => `${d.name}: ${d.distance} km`).join('<br>');
                 }
 
-                const popupImage = location.photo || `https://maps.googleapis.com/maps/api/streetview?size=250x150&location=${location.lat},${location.lng}&fov=90&heading=0&pitch=0&key=AIzaSyAVA28lCg3_AG_DN4C3qU8Jgp91cCqMVHQ`;
+                // Create media gallery for popup
+                let popupMediaHtml = '';
+                const media = location.media || [];
+                const globalIndex = locations.indexOf(location);
+                
+                if (media.length > 0) {
+                    const mediaItems = media.map((item, idx) => {
+                        if (item.type === 'video') {
+                            return `<video src="${item.data}" class="popup-media-item ${idx === 0 ? 'active' : ''}" muted loop playsinline controls style="width: 100%; max-height: 200px; object-fit: contain; border-radius: 6px;"></video>`;
+                        } else {
+                            return `<img src="${item.data}" class="popup-media-item ${idx === 0 ? 'active' : ''}" style="width: 100%; max-height: 200px; object-fit: contain; border-radius: 6px;" onerror="this.style.display='none'">`;
+                        }
+                    }).join('');
+                    
+                    popupMediaHtml = `
+                        <div class="popup-media-gallery" data-popup-location="${globalIndex}">
+                            ${mediaItems}
+                            ${media.length > 1 ? `
+                                <button class="media-gallery-nav prev" style="position: absolute; top: 50%; left: 10px; transform: translateY(-50%); background: rgba(0,0,0,0.7); color: white; border: none; width: 35px; height: 35px; border-radius: 50%; cursor: pointer; font-size: 20px; z-index: 10;" onclick="event.stopPropagation(); changePopupMediaByLocation(${globalIndex}, -1);">‹</button>
+                                <button class="media-gallery-nav next" style="position: absolute; top: 50%; right: 10px; transform: translateY(-50%); background: rgba(0,0,0,0.7); color: white; border: none; width: 35px; height: 35px; border-radius: 50%; cursor: pointer; font-size: 20px; z-index: 10;" onclick="event.stopPropagation(); changePopupMediaByLocation(${globalIndex}, 1);">›</button>
+                                <div class="media-gallery-counter" style="position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; z-index: 10;"><span class="popup-current-${globalIndex}">1</span>/${media.length}</div>
+                            ` : ''}
+                        </div>
+                    `;
+                } else {
+                    const fallbackImg = `https://maps.googleapis.com/maps/api/streetview?size=250x150&location=${location.lat},${location.lng}&fov=90&heading=0&pitch=0&key=AIzaSyAVA28lCg3_AG_DN4C3qU8Jgp91cCqMVHQ`;
+                    popupMediaHtml = `<img src="${fallbackImg}" style="width: 100%; border-radius: 6px; margin-bottom: 8px;" onerror="this.style.display='none'">`;
+                }
 
                 marker.bindPopup(`
                     <div style="padding: 5px; min-width: 250px;">
-                        <img src="${popupImage}" 
-                             style="width: 100%; border-radius: 6px; margin-bottom: 8px;"
-                             onerror="this.style.display='none'">
+                        ${popupMediaHtml}
                         <h3 style="margin: 0 0 5px 0; font-size: 16px;">${location.name}</h3>
                         ${location.description ? `<p style="margin: 0 0 5px 0; font-style: italic; color: #888; font-size: 12px;">${location.description}</p>` : ''}
                         <p style="margin: 0 0 5px 0; color: #666; font-size: 13px;">${location.address}</p>
@@ -689,15 +889,41 @@
 
             const listHtml = filteredLocations.map((loc, index) => {
                 const globalIndex = locations.indexOf(loc);
-                const previewImg = loc.photo || `https://maps.googleapis.com/maps/api/streetview?size=400x300&location=${loc.lat},${loc.lng}&fov=90&heading=0&pitch=0&key=AIzaSyAVA28lCg3_AG_DN4C3qU8Jgp91cCqMVHQ`;
                 const staticMapImg = `https://maps.googleapis.com/maps/api/staticmap?center=${loc.lat},${loc.lng}&zoom=15&size=400x300&markers=color:red%7C${loc.lat},${loc.lng}&key=AIzaSyDkTKLcf-lEt-A434W6O95LVc-6BAkt4vI`;
+                
+                let mediaHtml = '';
+                const media = loc.media || [];
+                
+                if (media.length > 0) {
+                    const mediaItems = media.map((item, idx) => {
+                        if (item.type === 'video') {
+                            return `<video src="${item.data}" class="media-gallery-item ${idx === 0 ? 'active' : ''}" muted loop playsinline></video>`;
+                        } else {
+                            return `<img src="${item.data}" class="media-gallery-item ${idx === 0 ? 'active' : ''}" onerror="this.src='${staticMapImg}'">`;
+                        }
+                    }).join('');
+                    
+                    mediaHtml = `
+                        <div class="media-gallery" data-location="${globalIndex}">
+                            ${mediaItems}
+                            ${media.length > 1 ? `
+                                <button class="media-gallery-nav prev" onclick="changeMedia(${globalIndex}, -1); event.stopPropagation();">‹</button>
+                                <button class="media-gallery-nav next" onclick="changeMedia(${globalIndex}, 1); event.stopPropagation();">›</button>
+                                <div class="media-gallery-counter"><span class="current-${globalIndex}">1</span>/${media.length}</div>
+                            ` : ''}
+                        </div>
+                    `;
+                } else {
+                    const fallbackImg = `https://maps.googleapis.com/maps/api/streetview?size=400x300&location=${loc.lat},${loc.lng}&fov=90&heading=0&pitch=0&key=AIzaSyAVA28lCg3_AG_DN4C3qU8Jgp91cCqMVHQ`;
+                    mediaHtml = `<img src="${fallbackImg}" class="location-preview-img" onerror="this.src='${staticMapImg}'">`;
+                }
                 
                 return `
                     <div class="location-item">
                         <button class="edit-btn" onclick="editLocation(${globalIndex}); event.stopPropagation();">✎</button>
                         <button class="delete-btn" onclick="deleteLocation(${globalIndex}); event.stopPropagation();">×</button>
                         <div onclick="focusLocation(${globalIndex})">
-                            <img src="${previewImg}" alt="${loc.name}" class="location-preview-img" onerror="this.src='${staticMapImg}'">
+                            ${mediaHtml}
                             <h3>${loc.name}</h3>
                             ${loc.description ? `<p style="font-style: italic; color: #888;">${loc.description}</p>` : ''}
                             <p>${loc.address}</p>
@@ -708,12 +934,156 @@
             }).join('');
 
             document.getElementById('locationList').innerHTML = listHtml;
+            
+            // Auto-play first video in each gallery
+            document.querySelectorAll('.media-gallery').forEach(gallery => {
+                const firstVideo = gallery.querySelector('video.media-gallery-item.active');
+                if (firstVideo) {
+                    firstVideo.play().catch(e => console.log('Autoplay prevented:', e));
+                }
+            });
         }
 
-        function deleteLocation(index) {
+        function changeMedia(locationIndex, direction) {
+            const gallery = document.querySelector(`.media-gallery[data-location="${locationIndex}"]`);
+            if (!gallery) return;
+            
+            const items = gallery.querySelectorAll('.media-gallery-item');
+            let currentIndex = Array.from(items).findIndex(item => item.classList.contains('active'));
+            
+            // Pause current video if it's playing
+            if (items[currentIndex].tagName === 'VIDEO') {
+                items[currentIndex].pause();
+                items[currentIndex].currentTime = 0;
+            }
+            
+            items[currentIndex].classList.remove('active');
+            currentIndex = (currentIndex + direction + items.length) % items.length;
+            items[currentIndex].classList.add('active');
+            
+            // Play new video if it's a video
+            if (items[currentIndex].tagName === 'VIDEO') {
+                items[currentIndex].play().catch(e => console.log('Video play failed:', e));
+            }
+            
+            const counter = gallery.querySelector(`.current-${locationIndex}`);
+            if (counter) counter.textContent = currentIndex + 1;
+        }
+
+        function changePopupMedia(event, direction) {
+            event.stopPropagation();
+            const popup = event.target.closest('.popup-media-gallery');
+            if (!popup) return;
+            
+            const items = popup.querySelectorAll('.popup-media-item');
+            let currentIndex = Array.from(items).findIndex(item => item.classList.contains('active'));
+            
+            // Pause current video if it's playing
+            if (items[currentIndex].tagName === 'VIDEO') {
+                items[currentIndex].pause();
+                items[currentIndex].currentTime = 0;
+            }
+            
+            items[currentIndex].classList.remove('active');
+            currentIndex = (currentIndex + direction + items.length) % items.length;
+            items[currentIndex].classList.add('active');
+            
+            // Play new video if it's a video
+            if (items[currentIndex].tagName === 'VIDEO') {
+                items[currentIndex].play().catch(e => console.log('Video play failed:', e));
+            }
+            
+            const counter = popup.querySelector('.current-media');
+            if (counter) counter.textContent = currentIndex + 1;
+        }
+
+        function changePopupMediaByLocation(locationIndex, direction) {
+            const popup = document.querySelector(`.popup-media-gallery[data-popup-location="${locationIndex}"]`);
+            if (!popup) return;
+            
+            const items = popup.querySelectorAll('.popup-media-item');
+            let currentIndex = Array.from(items).findIndex(item => item.classList.contains('active'));
+            
+            // Pause current video if it's playing
+            if (items[currentIndex] && items[currentIndex].tagName === 'VIDEO') {
+                items[currentIndex].pause();
+                items[currentIndex].currentTime = 0;
+            }
+            
+            items[currentIndex].classList.remove('active');
+            currentIndex = (currentIndex + direction + items.length) % items.length;
+            items[currentIndex].classList.add('active');
+            
+            // Play new video if it's a video
+            if (items[currentIndex].tagName === 'VIDEO') {
+                items[currentIndex].play().catch(e => console.log('Video play failed:', e));
+            }
+            
+            const counter = popup.querySelector(`.popup-current-${locationIndex}`);
+            if (counter) counter.textContent = currentIndex + 1;
+        }
+
+        // Add touch swipe support for galleries
+        function initSwipeGestures() {
+            let touchStartX = 0;
+            let touchEndX = 0;
+            
+            document.addEventListener('touchstart', function(e) {
+                const gallery = e.target.closest('.media-gallery, .popup-media-gallery');
+                if (gallery) {
+                    touchStartX = e.changedTouches[0].screenX;
+                }
+            }, false);
+            
+            document.addEventListener('touchend', function(e) {
+                const gallery = e.target.closest('.media-gallery');
+                const popupGallery = e.target.closest('.popup-media-gallery');
+                
+                if (gallery || popupGallery) {
+                    touchEndX = e.changedTouches[0].screenX;
+                    handleSwipe(gallery, popupGallery);
+                }
+            }, false);
+            
+            function handleSwipe(gallery, popupGallery) {
+                const swipeThreshold = 50;
+                const diff = touchStartX - touchEndX;
+                
+                if (Math.abs(diff) > swipeThreshold) {
+                    if (gallery) {
+                        const locationIndex = gallery.getAttribute('data-location');
+                        changeMedia(parseInt(locationIndex), diff > 0 ? 1 : -1);
+                    } else if (popupGallery) {
+                        const fakeEvent = { stopPropagation: () => {}, target: popupGallery };
+                        changePopupMedia(fakeEvent, diff > 0 ? 1 : -1);
+                    }
+                }
+            }
+        }
+
+        // Initialize swipe gestures when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+            initSwipeGestures();
+            
+            // Setup add location button handler
+            const addBtn = document.getElementById('addLocationBtn');
+            if (addBtn) {
+                addBtn.onclick = function() {
+                    addLocation();
+                };
+            }
+        });
+
+        async function deleteLocation(index) {
             if (confirm(`Delete "${locations[index].name}"?`)) {
+                // Delete media from IndexedDB
+                if (locations[index].id) {
+                    await deleteMediaFromIndexedDB(locations[index].id);
+                }
+                
                 locations.splice(index, 1);
-                localStorage.setItem('mapLocations', JSON.stringify(locations));
+                saveLocationsToLocalStorage();
                 renderLocations();
                 updateSidebar();
             }
@@ -727,18 +1097,104 @@
             document.getElementById('locationDescription').value = location.description || '';
             document.getElementById('locationCategory').value = location.category;
             
+            // Show existing media files
+            displayExistingMedia(index);
+            
             // Scroll to form
             document.querySelector('.add-location-form').scrollIntoView({ behavior: 'smooth' });
             
             // Change button to update mode
-            const addBtn = document.querySelector('.add-location-form button');
+            const addBtn = document.getElementById('addLocationBtn');
             addBtn.textContent = 'Update Location';
             addBtn.onclick = function() {
                 updateLocation(index);
             };
         }
 
-        function updateLocation(index) {
+        function displayExistingMedia(locationIndex) {
+            const location = locations[locationIndex];
+            const media = location.media || [];
+            
+            // Remove existing media display if any
+            let mediaDisplay = document.getElementById('existingMediaDisplay');
+            if (mediaDisplay) {
+                mediaDisplay.remove();
+            }
+            
+            if (media.length === 0) return;
+            
+            // Create media display container
+            mediaDisplay = document.createElement('div');
+            mediaDisplay.id = 'existingMediaDisplay';
+            mediaDisplay.style.cssText = 'margin-top: 10px; margin-bottom: 10px; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 4px;';
+            
+            const title = document.createElement('h4');
+            title.textContent = 'Existing Media Files:';
+            title.style.cssText = 'margin: 0 0 10px 0; font-size: 14px; color: #333;';
+            mediaDisplay.appendChild(title);
+            
+            // Create media items
+            media.forEach((item, idx) => {
+                const mediaItem = document.createElement('div');
+                mediaItem.style.cssText = 'display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px; position: relative;';
+                
+                // Thumbnail
+                const thumbnail = document.createElement(item.type === 'video' ? 'video' : 'img');
+                thumbnail.src = item.data;
+                thumbnail.style.cssText = 'width: 60px; height: 60px; object-fit: cover; border-radius: 4px; flex-shrink: 0;';
+                if (item.type === 'video') {
+                    thumbnail.muted = true;
+                }
+                
+                // File info
+                const fileInfo = document.createElement('div');
+                fileInfo.style.cssText = 'flex: 1; font-size: 13px; color: #666; min-width: 0;';
+                const fileName = item.type === 'video' ? `Video ${idx + 1}` : `Image ${idx + 1}`;
+                const fileSize = Math.round(item.data.length / 1024);
+                fileInfo.innerHTML = `<strong>${fileName}</strong><br><span style="font-size: 11px; color: #999;">${fileSize} KB</span>`;
+                
+                // Delete button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = '×';
+                deleteBtn.type = 'button';
+                deleteBtn.style.cssText = 'background: #f44336; color: white; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 20px; font-weight: bold; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: background 0.3s;';
+                deleteBtn.onmouseover = function() { this.style.background = '#d32f2f'; };
+                deleteBtn.onmouseout = function() { this.style.background = '#f44336'; };
+                deleteBtn.onclick = function(e) {
+                    e.preventDefault();
+                    deleteMediaFile(locationIndex, idx);
+                };
+                
+                mediaItem.appendChild(thumbnail);
+                mediaItem.appendChild(fileInfo);
+                mediaItem.appendChild(deleteBtn);
+                mediaDisplay.appendChild(mediaItem);
+            });
+            
+            // Insert after the file input
+            const photoInput = document.getElementById('locationPhoto');
+            photoInput.parentNode.insertBefore(mediaDisplay, photoInput.nextSibling);
+        }
+
+        async function deleteMediaFile(locationIndex, mediaIndex) {
+            locations[locationIndex].media.splice(mediaIndex, 1);
+            
+            // Update IndexedDB
+            if (locations[locationIndex].id) {
+                await saveMediaToIndexedDB(locations[locationIndex].id, locations[locationIndex].media);
+            }
+            
+            // Refresh the media display without refreshing the whole page
+            displayExistingMedia(locationIndex);
+            
+            // Update the sidebar and map markers without scrolling
+            const scrollPos = window.scrollY;
+            renderLocations();
+            updateSidebar();
+            window.scrollTo(0, scrollPos);
+        }
+
+        async function updateLocation(index) {
             const manualName = document.getElementById('locationName').value;
             const description = document.getElementById('locationDescription').value;
             const category = document.getElementById('locationCategory').value;
@@ -749,39 +1205,60 @@
                 return;
             }
 
-            // Handle photo upload
-            if (photoInput.files && photoInput.files[0]) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    locations[index].photo = e.target.result;
-                    finishUpdate();
-                };
-                reader.readAsDataURL(photoInput.files[0]);
-            } else {
-                finishUpdate();
+            // Ensure location has an ID
+            if (!locations[index].id) {
+                locations[index].id = 'loc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             }
 
-            function finishUpdate() {
-                locations[index].name = manualName.trim();
-                locations[index].description = description;
-                locations[index].category = category;
-
-                // Clear form and reset button
-                document.getElementById('locationName').value = '';
-                document.getElementById('locationDescription').value = '';
-                document.getElementById('locationPhoto').value = '';
-                document.getElementById('locationLink').value = '';
+            // Handle photo upload - add to existing media, don't replace
+            if (photoInput.files && photoInput.files.length > 0) {
+                if (!locations[index].media) {
+                    locations[index].media = [];
+                }
                 
-                const addBtn = document.querySelector('.add-location-form button');
-                addBtn.textContent = 'Add Location';
-                addBtn.onclick = function() {
-                    addLocation();
-                };
-
-                localStorage.setItem('mapLocations', JSON.stringify(locations));
-                renderLocations();
-                updateSidebar();
+                for (let i = 0; i < photoInput.files.length; i++) {
+                    const file = photoInput.files[i];
+                    const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
+                    const reader = new FileReader();
+                    const mediaData = await new Promise((resolve) => {
+                        reader.onload = (e) => resolve(e.target.result);
+                        reader.readAsDataURL(file);
+                    });
+                    locations[index].media.push({ type: mediaType, data: mediaData });
+                }
+                
+                // Save updated media to IndexedDB
+                await saveMediaToIndexedDB(locations[index].id, locations[index].media);
             }
+
+            // Update location details
+            locations[index].name = manualName.trim();
+            locations[index].description = description;
+            locations[index].category = category;
+
+            // Save to localStorage
+            saveLocationsToLocalStorage();
+
+            // Clear form and reset button
+            document.getElementById('locationName').value = '';
+            document.getElementById('locationDescription').value = '';
+            document.getElementById('locationPhoto').value = '';
+            document.getElementById('locationLink').value = '';
+            
+            // Remove existing media display
+            const mediaDisplay = document.getElementById('existingMediaDisplay');
+            if (mediaDisplay) {
+                mediaDisplay.remove();
+            }
+            
+            const addBtn = document.getElementById('addLocationBtn');
+            addBtn.textContent = 'Add Location';
+            addBtn.onclick = function() {
+                addLocation();
+            };
+
+            renderLocations();
+            updateSidebar();
         }
 
         function focusLocation(index) {
@@ -932,25 +1409,46 @@
             // Use manual name if provided, otherwise use extracted name
             const finalName = manualName.trim() || result.name;
 
-            // Handle photo upload
-            let photoData = null;
-            if (photoInput.files && photoInput.files[0]) {
-                const reader = new FileReader();
-                photoData = await new Promise((resolve) => {
-                    reader.onload = (e) => resolve(e.target.result);
-                    reader.readAsDataURL(photoInput.files[0]);
-                });
+            // Generate unique ID for this location
+            const locationId = 'loc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+
+            // Handle multiple photo/video uploads
+            let mediaArray = [];
+            if (photoInput.files && photoInput.files.length > 0) {
+                for (let i = 0; i < photoInput.files.length; i++) {
+                    const file = photoInput.files[i];
+                    const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
+                    const reader = new FileReader();
+                    const mediaData = await new Promise((resolve) => {
+                        reader.onload = (e) => resolve(e.target.result);
+                        reader.readAsDataURL(file);
+                    });
+                    mediaArray.push({ type: mediaType, data: mediaData });
+                }
             }
 
-            locations.push({
+            // Create location object (without media data for localStorage)
+            const newLocation = {
+                id: locationId,
                 name: finalName,
                 category: category,
                 lat: result.lat,
                 lng: result.lng,
                 address: `${result.lat.toFixed(4)}, ${result.lng.toFixed(4)}`,
                 description: description || '',
-                photo: photoData
-            });
+                media: [] // Will be loaded from IndexedDB
+            };
+
+            // Save media to IndexedDB
+            if (mediaArray.length > 0) {
+                await saveMediaToIndexedDB(locationId, mediaArray);
+                newLocation.media = mediaArray; // Keep in memory for immediate display
+            }
+
+            locations.push(newLocation);
+
+            // Save location metadata to localStorage (without media)
+            saveLocationsToLocalStorage();
 
             // Clear form
             document.getElementById('locationLink').value = '';
@@ -958,13 +1456,26 @@
             document.getElementById('locationDescription').value = '';
             document.getElementById('locationPhoto').value = '';
 
-            saveToJSON();
             renderLocations();
             updateSidebar();
         }
 
+        // Save locations to localStorage (without media data)
+        function saveLocationsToLocalStorage() {
+            const locationsWithoutMedia = locations.map(loc => ({
+                id: loc.id,
+                name: loc.name,
+                category: loc.category,
+                lat: loc.lat,
+                lng: loc.lng,
+                address: loc.address,
+                description: loc.description
+            }));
+            localStorage.setItem('mapLocations', JSON.stringify(locationsWithoutMedia));
+        }
+
         function saveToJSON() {
-            localStorage.setItem('mapLocations', JSON.stringify(locations));
+            saveLocationsToLocalStorage();
             // Show brief confirmation without alert on mobile
             if (window.innerWidth <= 768) {
                 const btn = event?.target;
@@ -976,19 +1487,41 @@
             }
         }
 
-        function loadFromJSON() {
+        async function loadFromJSON() {
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = '.json';
-            input.onchange = (e) => {
+            input.onchange = async (e) => {
                 const file = e.target.files[0];
                 const reader = new FileReader();
-                reader.onload = (event) => {
+                reader.onload = async (event) => {
                     try {
                         const data = JSON.parse(event.target.result);
                         if (Array.isArray(data)) {
+                            // Clear existing IndexedDB data
+                            for (let loc of locations) {
+                                if (loc.id) {
+                                    await deleteMediaFromIndexedDB(loc.id);
+                                }
+                            }
+                            
+                            // Load new data
                             locations = data;
-                            saveToJSON();
+                            
+                            // Ensure all locations have IDs and save media to IndexedDB
+                            for (let i = 0; i < locations.length; i++) {
+                                if (!locations[i].id) {
+                                    locations[i].id = 'loc_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 9);
+                                }
+                                
+                                if (locations[i].media && locations[i].media.length > 0) {
+                                    await saveMediaToIndexedDB(locations[i].id, locations[i].media);
+                                } else {
+                                    locations[i].media = [];
+                                }
+                            }
+                            
+                            saveLocationsToLocalStorage();
                             renderLocations();
                             updateSidebar();
                         } else {
@@ -1004,6 +1537,7 @@
         }
 
         function exportJSON() {
+            // Export with media data included
             const dataStr = JSON.stringify(locations, null, 2);
             const dataBlob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(dataBlob);
@@ -1013,9 +1547,6 @@
             link.click();
             URL.revokeObjectURL(url);
         }
-
-        // Initialize map when page loads
-        document.addEventListener('DOMContentLoaded', initMap);
 
         // Mobile Panel Functions
         function showMobilePanel(type) {
@@ -1033,7 +1564,40 @@
                     break;
                 case 'list':
                     title.textContent = 'Locations';
-                    content.innerHTML = document.getElementById('locationList').innerHTML;
+                    const listHtml = (currentFilter === 'all' ? locations : locations.filter(loc => loc.category === currentFilter))
+                        .map((loc, idx) => {
+                            const globalIndex = locations.indexOf(loc);
+                            const staticMapImg = `https://maps.googleapis.com/maps/api/staticmap?center=${loc.lat},${loc.lng}&zoom=15&size=400x300&markers=color:red%7C${loc.lat},${loc.lng}&key=AIzaSyDkTKLcf-lEt-A434W6O95LVc-6BAkt4vI`;
+                            const media = loc.media || [];
+                            
+                            let mediaHtml = '';
+                            if (media.length > 0) {
+                                const firstMedia = media[0];
+                                if (firstMedia.type === 'video') {
+                                    mediaHtml = `<video src="${firstMedia.data}" class="location-preview-img" muted loop playsinline></video>`;
+                                } else {
+                                    mediaHtml = `<img src="${firstMedia.data}" class="location-preview-img" onerror="this.src='${staticMapImg}'">`;
+                                }
+                            } else {
+                                const fallbackImg = `https://maps.googleapis.com/maps/api/streetview?size=400x300&location=${loc.lat},${loc.lng}&fov=90&heading=0&pitch=0&key=AIzaSyAVA28lCg3_AG_DN4C3qU8Jgp91cCqMVHQ`;
+                                mediaHtml = `<img src="${fallbackImg}" class="location-preview-img" onerror="this.src='${staticMapImg}'">`;
+                            }
+                            
+                            return `
+                                <div class="location-item">
+                                    <button class="edit-btn" onclick="editLocationMobile(${globalIndex}); event.stopPropagation();">✎</button>
+                                    <button class="delete-btn" onclick="deleteLocation(${globalIndex}); event.stopPropagation();">×</button>
+                                    <div onclick="focusLocation(${globalIndex}); closeMobilePanel();">
+                                        ${mediaHtml}
+                                        <h3>${loc.name}</h3>
+                                        ${loc.description ? `<p style="font-style: italic; color: #888;">${loc.description}</p>` : ''}
+                                        <p>${loc.address}</p>
+                                        <span class="category-badge ${loc.category}">${loc.category}</span>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    content.innerHTML = listHtml;
                     panel.classList.add('active');
                     break;
                 case 'filter':
@@ -1062,7 +1626,9 @@
                             <input type="text" id="locationLinkMobile" placeholder="Google Maps Share Link">
                             <input type="text" id="locationNameMobile" placeholder="Location Name (optional)">
                             <textarea id="locationDescriptionMobile" placeholder="Description (optional)" rows="3" style="resize: vertical;"></textarea>
-                            <input type="file" id="locationPhotoMobile" accept="image/*" style="margin-bottom: 10px;">
+                            <input type="file" id="locationPhotoMobile" accept="image/*,video/*" multiple style="margin-bottom: 10px;">
+                            <small style="display: block; margin-bottom: 10px; color: #666;">Upload multiple photos or videos</small>
+                            <div id="existingMediaDisplayMobile"></div>
                             <select id="locationCategoryMobile">
                                 <option value="breakfast">Breakfast</option>
                                 <option value="lunch">Lunch</option>
@@ -1089,6 +1655,137 @@
             closeMobilePanel();
         }
 
+        function editLocationMobile(index) {
+            const location = locations[index];
+            const panel = document.getElementById('mobilePanel');
+            const title = document.getElementById('mobilePanelTitle');
+            const content = document.getElementById('mobilePanelContent');
+            
+            title.textContent = 'Edit Location';
+            content.innerHTML = `
+                <div class="add-location-form">
+                    <input type="text" id="locationNameMobile" placeholder="Location Name" value="${location.name}">
+                    <textarea id="locationDescriptionMobile" placeholder="Description (optional)" rows="3" style="resize: vertical;">${location.description || ''}</textarea>
+                    <input type="file" id="locationPhotoMobile" accept="image/*,video/*" multiple style="margin-bottom: 10px;">
+                    <small style="display: block; margin-bottom: 10px; color: #666;">Upload multiple photos or videos</small>
+                    <div id="existingMediaDisplayMobile"></div>
+                    <select id="locationCategoryMobile">
+                        <option value="breakfast" ${location.category === 'breakfast' ? 'selected' : ''}>Breakfast</option>
+                        <option value="lunch" ${location.category === 'lunch' ? 'selected' : ''}>Lunch</option>
+                        <option value="dinner" ${location.category === 'dinner' ? 'selected' : ''}>Dinner</option>
+                        <option value="hotel" ${location.category === 'hotel' ? 'selected' : ''}>Hotel</option>
+                        <option value="travel" ${location.category === 'travel' ? 'selected' : ''}>Travel</option>
+                    </select>
+                    <button onclick="updateLocationMobile(${index})">Update Location</button>
+                </div>
+            `;
+            
+            panel.classList.add('active');
+            displayExistingMediaMobile(index);
+        }
+
+        function displayExistingMediaMobile(locationIndex) {
+            const location = locations[locationIndex];
+            const media = location.media || [];
+            
+            const mediaDisplay = document.getElementById('existingMediaDisplayMobile');
+            if (!mediaDisplay) return;
+            
+            if (media.length === 0) {
+                mediaDisplay.innerHTML = '';
+                mediaDisplay.style.display = 'none';
+                return;
+            }
+            
+            mediaDisplay.style.cssText = 'margin-bottom: 10px; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 4px; display: block;';
+            
+            let html = '<h4 style="margin: 0 0 10px 0; font-size: 14px; color: #333;">Existing Media Files:</h4>';
+            
+            media.forEach((item, idx) => {
+                const fileName = item.type === 'video' ? `Video ${idx + 1}` : `Image ${idx + 1}`;
+                const fileSize = Math.round(item.data.length / 1024);
+                const thumbnailTag = item.type === 'video' 
+                    ? `<video src="${item.data}" muted style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; flex-shrink: 0;"></video>`
+                    : `<img src="${item.data}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; flex-shrink: 0;">`;
+                
+                html += `
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
+                        ${thumbnailTag}
+                        <div style="flex: 1; font-size: 13px; color: #666; min-width: 0;">
+                            <strong>${fileName}</strong><br>
+                            <span style="font-size: 11px; color: #999;">${fileSize} KB</span>
+                        </div>
+                        <button type="button" onclick="deleteMediaFileMobile(${locationIndex}, ${idx}); event.stopPropagation();" style="background: #f44336; color: white; border: none; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: 20px; font-weight: bold; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">×</button>
+                    </div>
+                `;
+            });
+            
+            mediaDisplay.innerHTML = html;
+        }
+
+        async function deleteMediaFileMobile(locationIndex, mediaIndex) {
+            locations[locationIndex].media.splice(mediaIndex, 1);
+            
+            // Update IndexedDB
+            if (locations[locationIndex].id) {
+                await saveMediaToIndexedDB(locations[locationIndex].id, locations[locationIndex].media);
+            }
+            
+            // Refresh the media display without closing the panel
+            displayExistingMediaMobile(locationIndex);
+            
+            // Update the map and sidebar
+            renderLocations();
+            updateSidebar();
+        }
+
+        async function updateLocationMobile(index) {
+            const manualName = document.getElementById('locationNameMobile').value;
+            const description = document.getElementById('locationDescriptionMobile').value;
+            const category = document.getElementById('locationCategoryMobile').value;
+            const photoInput = document.getElementById('locationPhotoMobile');
+
+            if (!manualName.trim()) {
+                alert('Please enter a location name');
+                return;
+            }
+
+            // Ensure location has an ID
+            if (!locations[index].id) {
+                locations[index].id = 'loc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            }
+
+            // Handle photo upload - add to existing media
+            if (photoInput.files && photoInput.files.length > 0) {
+                if (!locations[index].media) {
+                    locations[index].media = [];
+                }
+                
+                for (let i = 0; i < photoInput.files.length; i++) {
+                    const file = photoInput.files[i];
+                    const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
+                    const reader = new FileReader();
+                    const mediaData = await new Promise((resolve) => {
+                        reader.onload = (e) => resolve(e.target.result);
+                        reader.readAsDataURL(file);
+                    });
+                    locations[index].media.push({ type: mediaType, data: mediaData });
+                }
+                
+                // Save updated media to IndexedDB
+                await saveMediaToIndexedDB(locations[index].id, locations[index].media);
+            }
+
+            locations[index].name = manualName.trim();
+            locations[index].description = description;
+            locations[index].category = category;
+
+            saveLocationsToLocalStorage();
+            renderLocations();
+            updateSidebar();
+            closeMobilePanel();
+        }
+
         async function addLocationMobile() {
             const link = document.getElementById('locationLinkMobile').value;
             const manualName = document.getElementById('locationNameMobile').value;
@@ -1109,26 +1806,45 @@
 
             const finalName = manualName.trim() || result.name;
 
-            let photoData = null;
-            if (photoInput.files && photoInput.files[0]) {
-                const reader = new FileReader();
-                photoData = await new Promise((resolve) => {
-                    reader.onload = (e) => resolve(e.target.result);
-                    reader.readAsDataURL(photoInput.files[0]);
-                });
+            // Generate unique ID for this location
+            const locationId = 'loc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+
+            // Handle multiple photo/video uploads
+            let mediaArray = [];
+            if (photoInput.files && photoInput.files.length > 0) {
+                for (let i = 0; i < photoInput.files.length; i++) {
+                    const file = photoInput.files[i];
+                    const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
+                    const reader = new FileReader();
+                    const mediaData = await new Promise((resolve) => {
+                        reader.onload = (e) => resolve(e.target.result);
+                        reader.readAsDataURL(file);
+                    });
+                    mediaArray.push({ type: mediaType, data: mediaData });
+                }
             }
 
-            locations.push({
+            // Create location object
+            const newLocation = {
+                id: locationId,
                 name: finalName,
                 category: category,
                 lat: result.lat,
                 lng: result.lng,
                 address: `${result.lat.toFixed(4)}, ${result.lng.toFixed(4)}`,
                 description: description || '',
-                photo: photoData
-            });
+                media: []
+            };
 
-            saveToJSON();
+            // Save media to IndexedDB
+            if (mediaArray.length > 0) {
+                await saveMediaToIndexedDB(locationId, mediaArray);
+                newLocation.media = mediaArray;
+            }
+
+            locations.push(newLocation);
+
+            saveLocationsToLocalStorage();
             renderLocations();
             updateSidebar();
             closeMobilePanel();
